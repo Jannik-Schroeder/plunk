@@ -101,16 +101,16 @@ export class Contacts {
 			throw new NotFound("project");
 		}
 
-		const { id } = UtilitySchemas.id.parse(req.body);
+		const { id, email } = ContactSchemas.manage.parse(req.body);
 
-		const contact = await ContactService.id(id);
+		let contact = id ? await ContactService.id(id) : await ContactService.email(project.id, email as string);
 
 		if (!contact || contact.projectId !== project.id) {
 			throw new NotFound("contact");
 		}
 
-		await prisma.contact.update({
-			where: { id },
+		contact = await prisma.contact.update({
+			where: { id: contact.id },
 			data: { subscribed: false },
 		});
 
@@ -152,16 +152,16 @@ export class Contacts {
 			throw new NotFound("project");
 		}
 
-		const { id } = UtilitySchemas.id.parse(req.body);
+		const { id, email } = ContactSchemas.manage.parse(req.body);
 
-		const contact = await ContactService.id(id);
+		let contact = id ? await ContactService.id(id) : await ContactService.email(project.id, email as string);
 
 		if (!contact || contact.projectId !== project.id) {
 			throw new NotFound("contact");
 		}
 
-		await prisma.contact.update({
-			where: { id },
+		contact = await prisma.contact.update({
+			where: { id: contact.id },
 			data: { subscribed: true },
 		});
 
@@ -246,26 +246,42 @@ export class Contacts {
 			throw new NotFound("project");
 		}
 
-		const { id, email, subscribed, data } = ContactSchemas.update.parse(req.body);
+		const { id, email, subscribed, data } = ContactSchemas.manage.parse(req.body);
 
-		let contact = await ContactService.id(id);
+		let contact = id ? await ContactService.id(id) : await ContactService.email(project.id, email as string);
 
 		if (!contact || contact.projectId !== project.id) {
 			throw new NotFound("contact");
 		}
 
+		const updateData: Record<string, unknown> = {
+			email,
+			subscribed: subscribed ?? contact.subscribed,
+		};
+
+		if (data) {
+			const givenUserData = Object.entries(data);
+			const dataToUpdate = JSON.parse(contact.data ?? "{}");
+
+			givenUserData.forEach(([key, value]) => {
+				if (!value) {
+					delete dataToUpdate[key];
+				} else {
+					dataToUpdate[key] = value;
+				}
+			});
+
+			updateData.data = JSON.stringify(dataToUpdate);
+		}
+
 		contact = await prisma.contact.update({
-			where: { id },
-			data: { email, subscribed, data: data ? JSON.stringify(data) : null },
-			include: {
-				triggers: { include: { event: true, action: true } },
-				emails: { where: { subject: { not: null } } },
-			},
+			where: { id: contact.id },
+			data: updateData,
 		});
 
 		await redis.del(Keys.Project.contacts(project.id));
 		await redis.del(Keys.Contact.id(contact.id));
-		await redis.del(Keys.Contact.email(project.id, email));
+		await redis.del(Keys.Contact.email(project.id, contact.email));
 
 		return res.status(200).json({
 			success: true,

@@ -1,15 +1,23 @@
 import cron from "node-cron";
 import signale from "signale";
-import { API_URI } from "./constants";
 
-export const task = cron.schedule("* * * * *", () => {
+import { Identities } from "../controllers/Identities";
+import { Tasks } from "../controllers/Tasks";
+
+export const task = cron.schedule("* * * * *", async () => {
 	signale.info("Running scheduled tasks");
-	void fetch(`${API_URI}/tasks`, {
-		method: "POST",
-	});
+	try {
+		await (new Tasks().handleTasks());
+	} catch (e) {
+		signale.error("Failed to run scheduled tasks. Please check the error below");
+		console.error(e);
+	}
 
 	signale.info("Updating verified identities");
-	void fetch(`${API_URI}/identities/update`, {
-		method: "POST",
-	});
+	try {
+		await (new Identities().updateIdentities());
+	} catch (e) {
+		signale.error("Failed to update verified identities. Please check the error below");
+		console.error(e);
+	}
 });

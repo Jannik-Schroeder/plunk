@@ -6,7 +6,7 @@ import dayjs from "dayjs";
 import { AnimatePresence, motion } from "framer-motion";
 import { Search, Users2, XIcon } from "lucide-react";
 import { useRouter } from "next/router";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { type FieldError, useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { Alert, Card, Dropdown, Editor, FullscreenLoader, Input, MultiselectDropdown } from "../../components";
@@ -20,6 +20,8 @@ import { network } from "../../lib/network";
 interface CampaignValues {
 	subject: string;
 	body: string;
+	email?: string;
+	from?: string;
 	recipients: string[];
 	style: "PLUNK" | "HTML";
 }
@@ -58,6 +60,8 @@ export default function Index() {
 		formState: { errors },
 		setValue,
 		watch,
+		setError,
+		clearErrors,
 	} = useForm<CampaignValues>({
 		resolver: zodResolver(CampaignSchemas.create),
 		defaultValues: {
@@ -66,6 +70,21 @@ export default function Index() {
 			style: "PLUNK",
 		},
 	});
+
+	useEffect(() => {
+		watch((value, { name, type }) => {
+			if (name === "email") {
+				if (value.email && project?.email && !value.email.endsWith(project.email.split("@")[1])) {
+					setError("email", {
+						type: "manual",
+						message: `The sender address must end with @${project.email?.split("@")[1]}`,
+					});
+				} else {
+					clearErrors("email");
+				}
+			}
+		});
+	}, [watch, project, setError, clearErrors]);
 
 	if (!project || !events) {
 		return <FullscreenLoader />;
@@ -193,14 +212,37 @@ export default function Index() {
 		<>
 			<Dashboard>
 				<Card title={"Create a new campaign"}>
-					<form onSubmit={handleSubmit(create)} className="space-6 grid gap-6 sm:grid-cols-6">
-						<Input
-							className={"sm:col-span-6"}
-							label={"Subject"}
-							placeholder={`Welcome to ${project.name}!`}
-							register={register("subject")}
-							error={errors.subject}
-						/>
+					<form onSubmit={handleSubmit(create)} className="space-y-6 sm:grid sm:grid-cols-6 sm:gap-6">
+						<div className={"sm:col-span-6 sm:grid sm:grid-cols-6 sm:gap-6 space-y-6 sm:space-y-0"}>
+							<Input
+								className={"sm:col-span-6"}
+								label={"Subject"}
+								placeholder={`Welcome to ${project.name}!`}
+								register={register("subject")}
+								error={errors.subject}
+							/>
+
+							{project.verified && (
+								<Input
+									className={"sm:col-span-3"}
+									label={"Sender Email"}
+									placeholder={`${project.email}`}
+									register={register("email")}
+									error={errors.email}
+								/>
+							)}
+
+							{project.verified && (
+								<Input
+									className={"sm:col-span-3"}
+									label={"Sender Name"}
+									placeholder={`${project.from ?? project.name}`}
+									register={register("from")}
+									error={errors.from}
+								/>
+							)}
+						</div>
+
 						{contacts ? (
 							<>
 								<div className={"sm:col-span-3"}>
@@ -584,7 +626,7 @@ export default function Index() {
 									return router.push("/campaigns");
 								}}
 								className={
-									"flex w-full justify-center rounded border border-neutral-300 bg-white px-6 py-2 text-base font-medium text-neutral-800 focus:outline-none focus:ring-2 focus:ring-neutral-800 focus:ring-offset-2 sm:mt-0 sm:w-auto sm:text-sm"
+									"flex w-fit justify-center rounded border border-neutral-300 bg-white px-6 py-2 text-base font-medium text-neutral-800 focus:outline-none focus:ring-2 focus:ring-neutral-800 focus:ring-offset-2 sm:mt-0 sm:w-auto sm:text-sm"
 								}
 							>
 								Cancel

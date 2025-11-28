@@ -9,6 +9,7 @@ export class EmailService {
 		content,
 		reply,
 		headers,
+		attachments,
 	}: {
 		from: {
 			name: string;
@@ -23,6 +24,11 @@ export class EmailService {
 		headers?: {
 			[key: string]: string;
 		} | null;
+		attachments?: Array<{
+			filename: string;
+			content: string;
+			contentType: string;
+		}> | null;
 	}) {
 		// Check if the body contains an unsubscribe link
 		const regex = /unsubscribe\/([a-f\d-]+)"/;
@@ -34,12 +40,20 @@ export class EmailService {
 			unsubscribeLink = `List-Unsubscribe: <https://${APP_URI}/unsubscribe/${unsubscribeId}>`;
 		}
 
+		// Generate a unique boundary for multipart messages
+		const boundary = `----=_NextPart_${Math.random().toString(36).substring(2)}`;
+		const mixedBoundary = attachments?.length ? `----=_MixedPart_${Math.random().toString(36).substring(2)}` : null;
+
 		const rawMessage = `From: ${from.name} <${from.email}>
 To: ${to.join(", ")}
 Reply-To: ${reply || from.email}
 Subject: ${content.subject}
 MIME-Version: 1.0
-Content-Type: multipart/alternative; boundary="NextPart"
+${
+	mixedBoundary 
+		? `Content-Type: multipart/mixed; boundary="${mixedBoundary}"`
+		: `Content-Type: multipart/alternative; boundary="${boundary}"`
+}
 ${
 	headers
 		? Object.entries(headers)
@@ -49,13 +63,28 @@ ${
 }
 ${unsubscribeLink}
 
---NextPart
+${mixedBoundary ? `--${mixedBoundary}\n` : ""}${
+	mixedBoundary 
+		? `Content-Type: multipart/alternative; boundary="${boundary}"\n\n` 
+		: ""
+}--${boundary}
 Content-Type: text/html; charset=utf-8
 Content-Transfer-Encoding: 7bit
 
 ${EmailService.breakLongLines(content.html, 500)}
---NextPart--
-`;
+--${boundary}--
+${
+	attachments?.length 
+		? attachments.map(attachment => `
+--${mixedBoundary}
+Content-Type: ${attachment.contentType}
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="${attachment.filename}"
+
+${EmailService.breakLongLines(attachment.content, 76, true)}
+`).join('\n')
+		: ""
+}${mixedBoundary ? `\n--${mixedBoundary}--` : ""}`;
 
 		const response = await ses.sendRawEmail({
 			Destinations: to,
@@ -107,7 +136,7 @@ ${
             <hr style="border: none; border-top: 1px solid #eaeaea; width: 100%; margin-top: 12px; margin-bottom: 12px;">
             <p style="font-size: 12px; line-height: 24px; margin: 16px 0; text-align: center; color: rgb(64, 64, 64);">
               You received this email because you agreed to receive emails from ${project.name}. If you no longer wish to receive emails like this, please 
-              <a href="https://${APP_URI}/unsubscribe/${contact.id}">update your preferences</a>.
+              <a href="${APP_URI.startsWith("https://") ? APP_URI : `https://${APP_URI}`}/unsubscribe/${contact.id}">update your preferences</a>.
             </p>
           </td>
         </tr>
@@ -472,7 +501,7 @@ ${
               <mj-divider border-width="2px" border-color="#f5f5f5"></mj-divider>
               <mj-text align="center">
                 <p style="color: #a3a3a3; text-decoration: none; font-size: 12px; line-height: 1.7142857;">
-                  You received this email because you agreed to receive emails from ${project.name}. If you no longer wish to receive emails like this, please <a style="text-decoration: underline" href="${APP_URI}/unsubscribe/${contact.id}" target="_blank">update your preferences</a>.
+                  You received this email because you agreed to receive emails from ${project.name}. If you no longer wish to receive emails like this, please <a style="text-decoration: underline" href="${APP_URI.startsWith("https://") ? APP_URI : `https://${APP_URI}`}/unsubscribe/${contact.id}" target="_blank">update your preferences</a>.
                 </p>
               </mj-text>
             `
@@ -501,23 +530,33 @@ ${
 		};
 	}
 
-	private static breakLongLines(input: string, maxLineLength: number): string {
-		const lines = input.split("\n");
-		const result = [];
-		for (let line of lines) {
-			while (line.length > maxLineLength) {
-				let pos = maxLineLength;
-				while (pos > 0 && line[pos] !== " ") {
-					pos--;
-				}
-				if (pos === 0) {
-					pos = maxLineLength;
-				}
-				result.push(line.substring(0, pos));
-				line = line.substring(pos).trim();
+	private static breakLongLines(input: string, maxLineLength: number, isBase64: boolean = false): string {
+		if (isBase64) {
+			// For base64 content, break at exact intervals without looking for spaces
+			const result = [];
+			for (let i = 0; i < input.length; i += maxLineLength) {
+				result.push(input.substring(i, i + maxLineLength));
 			}
-			result.push(line);
+			return result.join("\n");
+		} else {
+			// Original implementation for text content
+			const lines = input.split("\n");
+			const result = [];
+			for (let line of lines) {
+				while (line.length > maxLineLength) {
+					let pos = maxLineLength;
+					while (pos > 0 && line[pos] !== " ") {
+						pos--;
+					}
+					if (pos === 0) {
+						pos = maxLineLength;
+					}
+					result.push(line.substring(0, pos));
+					line = line.substring(pos).trim();
+				}
+				result.push(line);
+			}
+			return result.join("\n");
 		}
-		return result.join("\n");
 	}
 }

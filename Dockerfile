@@ -1,5 +1,5 @@
 # Base Stage
-FROM node:alpine AS base
+FROM node:20-alpine3.20 AS base
 
 WORKDIR /app
 
@@ -19,7 +19,7 @@ RUN yarn workspace @plunk/api build
 RUN yarn workspace @plunk/dashboard build
 
 # Final Stage
-FROM node:alpine
+FROM node:20-alpine3.20
 
 WORKDIR /app
 
@@ -36,6 +36,6 @@ COPY deployment/entry.sh deployment/replace-variables.sh /app/
 
 RUN chmod +x /app/entry.sh /app/replace-variables.sh
 
-EXPOSE 3000
+EXPOSE 3000 4000 5000
 
 CMD ["sh", "/app/entry.sh"]

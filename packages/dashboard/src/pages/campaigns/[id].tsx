@@ -32,6 +32,8 @@ import { network } from "../../lib/network";
 interface CampaignValues {
 	subject: string;
 	body: string;
+	email?: string;
+	from?: string;
 	recipients: string[];
 	style: "PLUNK" | "HTML";
 }
@@ -71,6 +73,8 @@ export default function Index() {
 		watch,
 		reset,
 		setValue,
+		setError,
+		clearErrors,
 	} = useForm<CampaignValues>({
 		resolver: zodResolver(CampaignSchemas.update),
 		defaultValues: { recipients: [], body: undefined },
@@ -86,6 +90,21 @@ export default function Index() {
 			recipients: campaign.recipients.map((r: { id: string }) => r.id),
 		});
 	}, [reset, campaign]);
+
+	useEffect(() => {
+		watch((value, { name, type }) => {
+			if (name === "email") {
+				if (value.email && project?.email && !value.email.endsWith(project.email.split("@")[1])) {
+					setError("email", {
+						type: "manual",
+						message: `The sender address must end with @${project.email?.split("@")[1]}`,
+					});
+				} else {
+					clearErrors("email");
+				}
+			}
+		});
+	}, [watch, project, setError, clearErrors]);
 
 	if (!project || !campaign || !events || (watch("body") as string | undefined) === undefined) {
 		return <FullscreenLoader />;
@@ -403,14 +422,36 @@ export default function Index() {
 						</>
 					}
 				>
-					<form onSubmit={handleSubmit(update)} className="space-6 grid gap-6 sm:grid-cols-6">
-						<Input
-							className={"sm:col-span-6"}
-							label={"Subject"}
-							placeholder={`Welcome to ${project.name}!`}
-							register={register("subject")}
-							error={errors.subject}
-						/>
+					<form onSubmit={handleSubmit(update)} className="space-y-6 sm:space-y-0 sm:space-6 sm:grid sm:gap-6 sm:grid-cols-6">
+						<div className={"sm:col-span-6 grid sm:grid-cols-6 gap-6"}>
+							<Input
+								className={"sm:col-span-6"}
+								label={"Subject"}
+								placeholder={`Welcome to ${project.name}!`}
+								register={register("subject")}
+								error={errors.subject}
+							/>
+
+							{project.verified && (
+								<Input
+									className={"sm:col-span-3"}
+									label={"Sender Email"}
+									placeholder={`${project.email}`}
+									register={register("email")}
+									error={errors.email}
+								/>
+							)}
+
+							{project.verified && (
+								<Input
+									className={"sm:col-span-3"}
+									label={"Sender Name"}
+									placeholder={`${project.from ?? project.name}`}
+									register={register("from")}
+									error={errors.from}
+								/>
+							)}
+						</div>
 
 						{contacts ? (
 							<>
@@ -833,7 +874,7 @@ export default function Index() {
 							</AnimatePresence>
 						</div>
 
-						<div className={"ml-auto mt-6 flex justify-end gap-x-5 sm:col-span-6"}>
+						<div className={"ml-auto mt-6 sm:flex justify-end sm:gap-x-5 sm:col-span-6"}>
 							{campaign.status === "DRAFT" ? (
 								<>
 									<motion.button

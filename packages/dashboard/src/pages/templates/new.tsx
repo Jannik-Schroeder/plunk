@@ -3,7 +3,7 @@ import { TemplateSchemas } from "@plunk/shared";
 import type { Template } from "@prisma/client";
 import { AnimatePresence, motion } from "framer-motion";
 import { useRouter } from "next/router";
-import React from "react";
+import React, { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { Card, Dropdown, Editor, FullscreenLoader, Input, Tooltip } from "../../components";
@@ -15,6 +15,8 @@ import { network } from "../../lib/network";
 interface TemplateValues {
 	subject: string;
 	body: string;
+	email?: string;
+	from?: string;
 	type: "MARKETING" | "TRANSACTIONAL";
 	style: "PLUNK" | "HTML";
 }
@@ -41,6 +43,8 @@ export default function Index() {
 		formState: { errors },
 		watch,
 		setValue,
+		setError,
+		clearErrors,
 	} = useForm<TemplateValues>({
 		resolver: zodResolver(TemplateSchemas.create),
 		defaultValues: {
@@ -49,6 +53,21 @@ export default function Index() {
 			style: "PLUNK",
 		},
 	});
+
+	useEffect(() => {
+		watch((value, { name, type }) => {
+			if (name === "email") {
+				if (value.email && project?.email && !value.email.endsWith(project.email.split("@")[1])) {
+					setError("email", {
+						type: "manual",
+						message: `The sender address must end with @${project.email?.split("@")[1]}`,
+					});
+				} else {
+					clearErrors("email");
+				}
+			}
+		});
+	}, [watch, project, setError, clearErrors]);
 
 	if (!project) {
 		return <FullscreenLoader />;
@@ -77,7 +96,7 @@ export default function Index() {
 		<>
 			<Dashboard>
 				<Card title={"Create a new template"} description={"Reusable blueprints of your emails"}>
-					<form onSubmit={handleSubmit(create)} className="grid gap-6 sm:grid-cols-6">
+					<form onSubmit={handleSubmit(create)} className="space-y-6 sm:space-y-0 sm:grid sm:gap-6 sm:grid-cols-6">
 						<Input
 							className={"sm:col-span-4"}
 							label={"Subject"}
@@ -141,6 +160,26 @@ export default function Index() {
 							</AnimatePresence>
 						</div>
 
+						{project.verified && (
+							<Input
+								className={"sm:col-span-3"}
+								label={"Sender Email"}
+								placeholder={`${project.email}`}
+								register={register("email")}
+								error={errors.email}
+							/>
+						)}
+
+						{project.verified && (
+							<Input
+								className={"sm:col-span-3"}
+								label={"Sender Name"}
+								placeholder={`${project.from ?? project.name}`}
+								register={register("from")}
+								error={errors.from}
+							/>
+						)}
+
 						<div className={"sm:col-span-6"}>
 							<Editor
 								value={watch("body")}
@@ -174,7 +213,7 @@ export default function Index() {
 									return router.push("/templates");
 								}}
 								className={
-									"flex w-full justify-center rounded border border-neutral-300 bg-white px-6 py-2 text-base font-medium text-neutral-700 focus:outline-none focus:ring-2 focus:ring-neutral-800 focus:ring-offset-2 sm:mt-0 sm:w-auto sm:text-sm"
+									"flex w-fit justify-center rounded border border-neutral-300 bg-white px-6 py-2 text-base font-medium text-neutral-700 focus:outline-none focus:ring-2 focus:ring-neutral-800 focus:ring-offset-2 sm:mt-0 sm:w-auto sm:text-sm"
 								}
 							>
 								Cancel

@@ -3,9 +3,10 @@ import { CampaignSchemas, UtilitySchemas } from "@plunk/shared";
 import dayjs from "dayjs";
 import type { Request, Response } from "express";
 import { prisma } from "../../database/prisma";
-import { HttpException, NotFound } from "../../exceptions";
+import { HttpException, NotAllowed, NotFound } from "../../exceptions";
 import { type IJwt, type ISecret, isAuthenticated, isValidSecretKey } from "../../middleware/auth";
 import { CampaignService } from "../../services/CampaignService";
+import { ContactService } from "../../services/ContactService";
 import { EmailService } from "../../services/EmailService";
 import { MembershipService } from "../../services/MembershipService";
 import { ProjectService } from "../../services/ProjectService";
@@ -159,6 +160,8 @@ export class Campaigns {
 				subject: campaign.subject,
 				body: campaign.body,
 				style: campaign.style,
+				email: campaign.email,
+				from: campaign.from,
 			},
 		});
 
@@ -179,7 +182,15 @@ export class Campaigns {
 			throw new NotFound("project");
 		}
 
-		let { subject, body, recipients, style } = CampaignSchemas.create.parse(req.body);
+		let { subject, body, recipients, style, email, from } = CampaignSchemas.create.parse(req.body);
+
+		if (email && !project.verified) {
+			throw new NotAllowed("You need to attach a domain to your project to customize the sender address");
+		}
+
+		if (email && email.split("@")[1] !== project.email?.split("@")[1]) {
+			throw new NotAllowed("The sender address must be the same domain as the project's email address");
+		}
 
 		if (recipients.length === 1 && recipients[0] === "all") {
 			const projectContacts = await prisma.contact.findMany({
@@ -196,6 +207,8 @@ export class Campaigns {
 				subject,
 				body,
 				style,
+				from: from === "" ? null : from,
+				email: email === "" ? null : email,
 			},
 		});
 
@@ -203,11 +216,33 @@ export class Campaigns {
 		for (let i = 0; i < recipients.length; i += chunkSize) {
 			const chunk = recipients.slice(i, i + chunkSize);
 
+			const recipientIds = await Promise.all(
+				chunk.map(async (recipient) => {
+					if (recipient.includes("@")) {
+						let contact = await ContactService.email(recipient, project.id);
+
+						if (!contact) {
+							contact = await prisma.contact.create({
+								data: {
+									email: recipient,
+									projectId: project.id,
+									subscribed: true,
+								},
+							});
+						}
+
+						return contact.id;
+					}
+
+					return recipient;
+				}),
+			);
+
 			await prisma.campaign.update({
 				where: { id: campaign.id },
 				data: {
 					recipients: {
-						connect: chunk.map((r: string) => ({ id: r })),
+						connect: recipientIds.map((id) => ({ id })),
 					},
 				},
 			});
@@ -230,8 +265,15 @@ export class Campaigns {
 			throw new NotFound("project");
 		}
 
-		// eslint-disable-next-line prefer-const
-		let { id, subject, body, recipients, style } = CampaignSchemas.update.parse(req.body);
+		let { id, subject, body, recipients, style, email, from } = CampaignSchemas.update.parse(req.body);
+
+		if (email && !project.verified) {
+			throw new NotAllowed("You need to attach a domain to your project to customize the sender address");
+		}
+
+		if (email && email.split("@")[1] !== project.email?.split("@")[1]) {
+			throw new NotAllowed("The sender address must be the same domain as the project's email address");
+		}
 
 		if (recipients.length === 1 && recipients[0] === "all") {
 			const projectContacts = await prisma.contact.findMany({
@@ -254,6 +296,8 @@ export class Campaigns {
 				subject,
 				body,
 				style,
+				from: from === "" ? null : from,
+				email: email === "" ? null : email,
 			},
 			include: {
 				recipients: { select: { id: true } },
@@ -277,14 +321,43 @@ export class Campaigns {
 		});
 
 		const chunkSize = 500;
+
+		for (let i = 0; i < campaign.recipients.length; i += chunkSize) {
+			const chunk = campaign.recipients.slice(i, i + chunkSize);
+
+			await prisma.$executeRaw`DELETE FROM "_CampaignToContact" WHERE "A" = ${campaign.id} AND "B" = ANY(${chunk.map((c) => c.id)})`;
+		}
+
 		for (let i = 0; i < recipients.length; i += chunkSize) {
 			const chunk = recipients.slice(i, i + chunkSize);
 
+			const recipientIds = await Promise.all(
+				chunk.map(async (recipient) => {
+					if (recipient.includes("@")) {
+						let contact = await ContactService.email(recipient, project.id);
+
+						if (!contact) {
+							contact = await prisma.contact.create({
+								data: {
+									email: recipient,
+									projectId: project.id,
+									subscribed: true,
+								},
+							});
+						}
+
+						return contact.id;
+					}
+
+					return recipient;
+				}),
+			);
+
 			await prisma.campaign.update({
-				where: { id },
+				where: { id: campaign.id },
 				data: {
 					recipients: {
-						connect: chunk.map((r: string) => ({ id: r })),
+						connect: recipientIds.map((id) => ({ id })),
 					},
 				},
 			});

@@ -6,7 +6,7 @@ import Typography from "@tiptap/extension-typography";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { AnimatePresence, motion } from "framer-motion";
-import React, { useCallback, useRef, useState } from "react";
+import React, { useCallback, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { Modal } from "../../Overlay";
@@ -108,11 +108,28 @@ export default function Editor({ value, onChange, mode, modeSwitcher }: Markdown
 				keydown: (_view, event) => {
 					return event.key === "Enter" && !event.shiftKey;
 				},
+				paste: (view, event) => {
+					const text = event.clipboardData?.getData("text");
+					const urlPattern = /^(https?:\/\/)?([\w-]+\.)+[\w-]+(\/[\w- ./?%&=]*({{[\w-]+}})?)*$/;
+
+					if (editor && text && urlPattern.test(text)) {
+						event.preventDefault();
+						editor
+							.chain()
+							.focus()
+							.extendMarkRange("link")
+							.setLink({ href: text.startsWith("http") ? text : `https://${text}`, target: "_blank" })
+							.run();
+						editor.commands.insertContent(text);
+					}
+					return true;
+				},
 			},
 		},
 		onUpdate: ({ editor }) => {
 			onChange(editor.getHTML(), "PLUNK");
 		},
+		immediatelyRender: false
 	});
 
 	const {
@@ -264,9 +281,8 @@ export default function Editor({ value, onChange, mode, modeSwitcher }: Markdown
 							e.preventDefault();
 							setConfirmModal(true);
 						}}
-						className={`w-full flex-1 rounded p-2 text-sm font-medium ${
-							mode === "PLUNK" ? "bg-white" : "hover:bg-neutral-50"
-						} transition ease-in-out`}
+						className={`w-full flex-1 rounded p-2 text-sm font-medium ${mode === "PLUNK" ? "bg-white" : "hover:bg-neutral-50"
+							} transition ease-in-out`}
 					>
 						Plunk Editor
 					</button>
@@ -275,9 +291,8 @@ export default function Editor({ value, onChange, mode, modeSwitcher }: Markdown
 							e.preventDefault();
 							setConfirmModal(true);
 						}}
-						className={`w-full flex-1 rounded p-2 text-sm font-medium ${
-							mode === "HTML" ? "bg-white" : "hover:bg-neutral-50"
-						} transition ease-in-out`}
+						className={`w-full flex-1 rounded p-2 text-sm font-medium ${mode === "HTML" ? "bg-white" : "hover:bg-neutral-50"
+							} transition ease-in-out`}
 					>
 						HTML
 					</button>{" "}
@@ -696,8 +711,8 @@ export default function Editor({ value, onChange, mode, modeSwitcher }: Markdown
 											</div>
 										</div>
 										<>
-											<div className={"prose prose-sm prose-neutral space-y-4 break-words p-4"}>
-												<div className={"w-full"} style={{ width: "600px" }}>
+											<div className={"prose prose-sm prose-neutral space-y-4 break-words p-4 w-full"}>
+												<div className={"w-full lg:w-[600px]"}>
 													<EditorContent editor={editor} />
 													<EditorBubbleMenu
 														editor={editor}
@@ -724,7 +739,7 @@ export default function Editor({ value, onChange, mode, modeSwitcher }: Markdown
 						</>
 					) : (
 						<>
-							<div className={"mb-3 grid gap-3 md:grid-cols-1"}>
+							<div className={"mb-3 sm:grid sm:gap-3 md:grid-cols-1"}>
 								<div>
 									<label className="block text-sm font-medium text-neutral-700">Email Body</label>
 									<div className="mt-1 h-full">
@@ -752,10 +767,26 @@ export default function Editor({ value, onChange, mode, modeSwitcher }: Markdown
 									<label className="block text-sm font-medium text-neutral-700">Preview</label>
 
 									<div className={"mt-1 h-full rounded border border-neutral-300 p-3"}>
-										<div
-											className={"revert-tailwind"}
-											dangerouslySetInnerHTML={{
-												__html: value,
+										{/* injects value into iframe with script to dynamically adjust height based on content */}
+										<iframe
+											className="mb-0 overflow-hidden w-full"
+											srcDoc={`
+												${value}
+												<script>
+													window.addEventListener('load', function() {
+														const height = document.documentElement.offsetHeight;
+														window.parent.postMessage({ type: 'resize-iframe', height: height }, '*');
+													});
+												</script>
+											`}
+											onLoad={(e) => {
+												const handleMessage = (event: MessageEvent) => {
+													if (event.data?.type === 'resize-iframe') {
+														(e.target as HTMLIFrameElement).style.height = `${event.data.height}px`;
+													}
+												};
+												window.addEventListener('message', handleMessage);
+												return () => window.removeEventListener('message', handleMessage);
 											}}
 										/>
 									</div>

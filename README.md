@@ -8,8 +8,10 @@
 
 <p align="center">
     <img src="https://img.shields.io/github/contributors/useplunk/plunk"/>
-    <img src="https://img.shields.io/github/actions/workflow/status/driaug/plunk-whitelabel/docker-build.yml"/>
+    <img src="https://img.shields.io/github/actions/workflow/status/driaug/plunk-whitelabel/docker-build-prod.yml"/>
     <img src="https://img.shields.io/docker/pulls/driaug/plunk"/>
+    <img src="https://img.shields.io/github/license/useplunk/plunk"/>
+    <img src="https://img.shields.io/github/stars/useplunk/plunk"/>
 </p>
 
 ## Introduction
@@ -24,6 +26,20 @@ like [SendGrid](https://sendgrid.com/), [Resend](https://resend.com) or [Mailgun
 - **Transactional Emails**: Send emails straight from your API
 - **Automations**: Create automations based on user actions
 - **Broadcasts**: Send newsletters and product updates to big audiences
+
+## Sponsors
+Plunk is made possible by the support of our sponsors. If you self-host Plunk, consider supporting via [GitHub Sponsors](https://github.com/sponsors/driaug).
+
+<div align="center">
+  <table>
+    <tr>
+      <td align="center" width="120">
+        <img src="https://avatars.githubusercontent.com/u/206509599?s=200&v=4" style="width:80px; height:80px; object-fit:contain;"/><br/>
+        <a href="https://every.news/?ref=useplunk.com">Everynews</a>
+      </td>
+    </tr>
+  </table>
+</div>
 
 ## Self-hosting Plunk
 
